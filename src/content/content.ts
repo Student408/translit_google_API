@@ -189,7 +189,9 @@ class TransliterationHandler {
         this.removeSuggestionBox();
       });
       
-      this.suggestionBox.appendChild(item);
+      if (this.suggestionBox) {
+        this.suggestionBox.appendChild(item);
+      }
     });
     
     document.body.appendChild(this.suggestionBox);
