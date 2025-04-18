@@ -120,8 +120,16 @@ class TransliterationHandler {
       language: this.settings.language
     }, (response: TransliterationResponse) => {
       if (response?.success && response.suggestions.length) {
-        const suggestion = response.suggestions[0];
-        this.replaceWithSuggestion(before, suggestion);
+        // Store suggestions
+        this.suggestions = response.suggestions;
+        
+        if (this.settings.autoReplace) {
+          // Auto-replace with first suggestion
+          this.replaceWithSuggestion(before, this.suggestions[0]);
+        } else {
+          // Show suggestion dropdown when auto-replace is disabled
+          this.showSuggestions();
+        }
       } else {
         // no suggestions: just insert a space
         this.replaceWithSuggestion(before, word, true);
