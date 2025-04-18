@@ -17,27 +17,34 @@ try {
   process.exit(1);
 }
 
-// AFTER compiling via tsc, move JS files from subfolders to dist root
-const jsMap = [
-  { src: 'background/background.js', dest: 'background.js' },
-  { src: 'content/content.js',     dest: 'content.js' },
-  { src: 'popup/popup.js',         dest: 'popup.js' }
-];
-jsMap.forEach(({ src, dest }) => {
-  const from = path.join('dist', src);
-  const to   = path.join('dist', dest);
-  if (fs.existsSync(from)) {
-    fs.renameSync(from, to);
-  }
-});
+// AFTER compiling via tsc, move essential JS files to dist root
+console.log('Moving compiled JS files to root...');
 
-// Remove now-empty subdirectories
-['background', 'content', 'popup'].forEach(dir => {
-  const dirPath = path.join('dist', dir);
-  if (fs.existsSync(dirPath)) {
-    fs.rmSync(dirPath, { recursive: true, force: true });
-  }
-});
+try {
+  // Main JS files
+  ['background/background.js', 'content/content.js', 'popup/popup.js'].forEach(src => {
+    const srcPath = path.join('dist', src);
+    const destPath = path.join('dist', path.basename(src));
+    
+    if (fs.existsSync(srcPath)) {
+      fs.copyFileSync(srcPath, destPath);
+      console.log(`Moved: ${srcPath} -> ${destPath}`);
+    } else {
+      console.warn(`Warning: File not found: ${srcPath}`);
+    }
+  });
+  
+  // Remove any leftover subdirectories to avoid confusion
+  ['background', 'content', 'popup', 'services'].forEach(dir => {
+    const dirPath = path.join('dist', dir);
+    if (fs.existsSync(dirPath)) {
+      fs.rmSync(dirPath, { recursive: true, force: true });
+      console.log(`Removed directory: ${dirPath}`);
+    }
+  });
+} catch (error) {
+  console.error('Error during file reorganization:', error);
+}
 
 // Copy static files
 const filesToCopy = [

@@ -1,4 +1,30 @@
-import { SUPPORTED_LANGUAGES } from '../services/transliteration';
+/**
+ * Popup UI controller for the transliteration extension
+ */
+
+// Use a namespace to avoid variable conflict with background.ts
+namespace PopupModule {
+  // Map of supported languages with their codes
+  export const SUPPORTED_LANGUAGES_MAP = {
+    "Kannada": "kn",
+    "Hindi": "hi",
+    "Bengali": "bn",
+    "Tamil": "ta",
+    "Telugu": "te",
+    "Malayalam": "ml",
+    "Marathi": "mr",
+    "Gujarati": "gu",
+    "Nepali": "ne",
+    "Urdu": "ur",
+    "Sanskrit": "sa",
+    "Arabic": "ar",
+    "Persian": "fa",
+    "Russian": "ru",
+    "Japanese": "ja",
+    "Korean": "ko",
+    "Chinese": "zh"
+  };
+}
 
 interface TransliterationSettings {
   enabled: boolean;
@@ -30,8 +56,8 @@ class PopupManager {
     // Clear existing options first
     this.languageSelect.innerHTML = '';
     
-    // Populate language dropdown
-    Object.entries(SUPPORTED_LANGUAGES).forEach(([name, code]) => {
+    // Populate language dropdown - use namespaced version
+    Object.entries(PopupModule.SUPPORTED_LANGUAGES_MAP).forEach(([name, code]) => {
       const option = document.createElement('option');
       option.value = code;
       option.textContent = name;
@@ -44,7 +70,7 @@ class PopupManager {
     }
     
     // Log to verify languages are loaded
-    console.log('Language options initialized:', Object.keys(SUPPORTED_LANGUAGES).length);
+    console.log('Language options initialized:', Object.keys(PopupModule.SUPPORTED_LANGUAGES_MAP).length);
   }
   
   private async loadSettings(): Promise<void> {
@@ -67,7 +93,7 @@ class PopupManager {
         this.enabledToggle.checked = settings.enabled;
         
         // Ensure language code exists in our options
-        if (settings.language && Object.values(SUPPORTED_LANGUAGES).includes(settings.language)) {
+        if (settings.language && Object.values(PopupModule.SUPPORTED_LANGUAGES_MAP).includes(settings.language)) {
           this.languageSelect.value = settings.language;
         } else {
           this.languageSelect.value = 'kn'; // Default to Kannada

@@ -14,7 +14,8 @@
       "*": ["node_modules/*"]
     },
     "typeRoots": ["./node_modules/@types"],
-    "types": ["chrome"]
+    "types": ["chrome"],
+    "lib": ["dom", "es2017"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
