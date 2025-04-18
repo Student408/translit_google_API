@@ -20,6 +20,21 @@ const DEFAULT_SETTINGS: TransliterationSettings = {
   autoReplace: false
 };
 
+// Initialize settings on extension install/update
+chrome.runtime.onInstalled.addListener(() => {
+  console.log('Extension installed/updated, initializing settings...');
+  
+  // Check if settings exist, if not initialize them
+  chrome.storage.sync.get('translitSettings', (data) => {
+    if (!data.translitSettings) {
+      console.log('No settings found, initializing with defaults');
+      chrome.storage.sync.set({ translitSettings: DEFAULT_SETTINGS });
+    } else {
+      console.log('Existing settings found:', data.translitSettings);
+    }
+  });
+});
+
 // Initialize settings in storage if not already set
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.sync.get('translitSettings', (data: {translitSettings?: TransliterationSettings}) => {

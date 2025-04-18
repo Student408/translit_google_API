@@ -65,7 +65,7 @@ export class TransliterationService {
   }
 }
 
-// Map of supported languages with their codes
+// Map of supported languages with their codes - make sure this is properly exported
 export const SUPPORTED_LANGUAGES = {
   "Kannada": "kn",
   "Hindi": "hi",
