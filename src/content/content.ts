@@ -126,23 +126,27 @@ class TransliterationHandler {
     
     // Only transliterate if we have a valid word
     if (/\w+/.test(currentWord)) {
-      // Request transliteration from background script
-      chrome.runtime.sendMessage({
-        action: 'transliterate',
-        text: currentWord,
-        language: this.settings.language
-      }, (response: TransliterationResponse) => {
-        if (response && response.success) {
-          this.suggestions = response.suggestions;
-          if (this.suggestions.length > 0) {
-            if (this.settings.autoReplace) {
-              this.replaceWithSuggestion(this.suggestions[0]);
-            } else {
-              this.showSuggestions();
+      try {
+        // Request transliteration from background script
+        chrome.runtime.sendMessage({
+          action: 'transliterate',
+          text: currentWord,
+          language: this.settings.language
+        }, (response: TransliterationResponse) => {
+          if (response && response.success) {
+            this.suggestions = response.suggestions;
+            if (this.suggestions.length > 0) {
+              if (this.settings.autoReplace) {
+                this.replaceWithSuggestion(this.suggestions[0]);
+              } else {
+                this.showSuggestions();
+              }
             }
           }
-        }
-      });
+        });
+      } catch (error) {
+        console.error('Error sending message to background script:', error);
+      }
     }
   }
   

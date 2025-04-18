@@ -37,6 +37,28 @@ if (fs.existsSync('assets')) {
     const destPath = path.join('dist/assets', file);
     filesToCopy.push({ from: sourcePath, to: destPath });
   });
+} else {
+  // Create placeholder icon files if they don't exist
+  console.log('Creating placeholder icon files...');
+  fs.mkdirSync('assets', { recursive: true });
+  
+  // Create simple 1x1 pixel PNG files as placeholders
+  const iconSizes = [16, 48, 128];
+  
+  // Simple 1x1 transparent PNG base64 data
+  const pngData = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
+  
+  iconSizes.forEach(size => {
+    const iconPath = path.join('assets', `icon${size}.png`);
+    fs.writeFileSync(iconPath, pngData);
+    console.log(`Created placeholder icon: ${iconPath}`);
+    
+    // Add to files to copy
+    filesToCopy.push({
+      from: iconPath,
+      to: path.join('dist/assets', `icon${size}.png`)
+    });
+  });
 }
 
 // Copy all files

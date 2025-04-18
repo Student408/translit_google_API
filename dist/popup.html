@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transliteration Settings</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Transliteration</h1>
+    
+    <div class="form-group">
+      <label class="switch">
+        <input type="checkbox" id="enableTransliteration">
+        <span class="slider"></span>
+      </label>
+      <span class="label-text">Enable Transliteration</span>
+    </div>
+    
+    <div class="form-group">
+      <label for="languageSelect">Target Language:</label>
+      <select id="languageSelect" class="select-box"></select>
+    </div>
+    
+    <div class="form-group">
+      <label class="switch">
+        <input type="checkbox" id="autoReplace">
+        <span class="slider"></span>
+      </label>
+      <span class="label-text">Auto-replace with first suggestion</span>
+    </div>
+    
+    <div class="info-box">
+      <p>Type in any text field and press Space to get transliteration suggestions.</p>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

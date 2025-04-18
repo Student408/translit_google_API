@@ -16,7 +16,6 @@ export interface TransliterationResponse {
 export class TransliterationService {
   /**
    * Gets transliteration suggestions from Google Input Tools API
-   * Based on the Python implementation in translit_api_demo.py
    */
   public static async getTransliteration(options: TransliterationOptions): Promise<TransliterationResponse> {
     if (!options.text) {
