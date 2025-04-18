@@ -90,28 +90,39 @@ class TransliterationHandler {
   private handleKeyDown(event: KeyboardEvent): void {
     if (event.key === ' ' && this.settings.enabled && this.currentField) {
       this.updateInputBuffer();
-      this.processCurrentWord();
-      event.preventDefault(); // prevent default space, we'll re‑insert after translation
+      // Don't prevent default immediately, let processCurrentWord decide
+      this.processCurrentWord(event); 
     }
     // Handle special keys like Enter/Tab to select suggestion
-    if (!this.suggestionBox || !this.suggestions.length) return;
-    
-    if (event.key === 'Enter' || event.key === 'Tab') {
-      event.preventDefault();
-      // compute before-word context
-      const before = this.inputBuffer.substring(0, this.lastWordBoundary);
-      this.replaceWithSuggestion(before, this.suggestions[0]);
-      this.removeSuggestionBox();
-    } else if (event.key === 'Escape') {
-      this.removeSuggestionBox();
+    if (this.suggestionBox && this.suggestions.length > 0) {
+      if (event.key === 'Enter' || event.key === 'Tab') {
+        event.preventDefault();
+        // compute before-word context
+        const before = this.inputBuffer.substring(0, this.lastWordBoundary);
+        this.replaceWithSuggestion(before, this.suggestions[0]);
+        this.removeSuggestionBox();
+      } else if (event.key === 'Escape') {
+        event.preventDefault(); // Prevent closing modals etc.
+        this.removeSuggestionBox();
+      }
     }
   }
   
-  private async processCurrentWord(): Promise<void> {
+  private async processCurrentWord(event?: KeyboardEvent): Promise<void> {
     // lastWordBoundary already set by updateInputBuffer()
     const before = this.inputBuffer.substring(0, this.lastWordBoundary);
     const word = this.inputBuffer.substring(this.lastWordBoundary).trim();
-    if (!word) return;
+    // If the word is empty after trimming, just let the space happen naturally
+    if (!word) {
+        // If no word, ensure suggestion box is closed
+        this.removeSuggestionBox();
+        return; 
+    }
+
+    // Prevent default space behavior only if we are going to handle it
+    if (event) {
+        event.preventDefault();
+    }
 
     // request transliteration
     chrome.runtime.sendMessage({
@@ -131,7 +142,7 @@ class TransliterationHandler {
           this.showSuggestions();
         }
       } else {
-        // no suggestions: just insert a space
+        // no suggestions: insert the original word followed by a space
         this.replaceWithSuggestion(before, word, true);
       }
     });
@@ -139,23 +150,47 @@ class TransliterationHandler {
   
   private replaceWithSuggestion(beforeWord: string, suggestion: string, noTrans?: boolean): void {
     if (!this.currentField) return;
-    const suffix = noTrans ? ' ' : ' '; // always add a space
-    if (this.currentField.tagName === 'INPUT' || this.currentField.tagName === 'TEXTAREA') {
+    // Always add a space after the word/suggestion
+    const suffix = ' '; 
+    const nodeText = beforeWord + suggestion + suffix;
+
+    if (this.currentField.tagName.toLowerCase() === 'input' || 
+        this.currentField.tagName.toLowerCase() === 'textarea') {
       const input = this.currentField as HTMLInputElement;
-      input.value = beforeWord + suggestion + suffix;
-      const pos = (beforeWord + suggestion + suffix).length;
+      const currentScroll = input.scrollTop; // Preserve scroll position
+      input.value = nodeText;
+      const pos = nodeText.length;
       input.setSelectionRange(pos, pos);
-    } else {
+      input.scrollTop = currentScroll; // Restore scroll position
+    } else { // contentEditable
       const sel = window.getSelection();
-      if (!sel) return;
-      const nodeText = beforeWord + suggestion + suffix;
-      this.currentField.textContent = nodeText;
-      const range = document.createRange();
-      range.setStart(this.currentField.firstChild!, nodeText.length);
+      if (!sel || !sel.rangeCount) return;
+
+      const range = sel.getRangeAt(0);
+      const textNode = this.currentField.firstChild;
+
+      // More robust handling for contentEditable
+      if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+          // If the field only contains text, replace it
+          textNode.textContent = nodeText;
+          range.setStart(textNode, nodeText.length);
+      } else {
+          // If the field might contain other elements, clear and insert
+          this.currentField.textContent = nodeText;
+          const newTextNode = this.currentField.firstChild;
+          if (newTextNode) {
+              range.setStart(newTextNode, nodeText.length);
+          }
+      }
+      
       range.collapse(true);
       sel.removeAllRanges();
       sel.addRange(range);
+      // Ensure the field scrolls into view if necessary
+      this.currentField.focus(); 
     }
+    // Update buffer after replacement
+    this.updateInputBuffer(); 
   }
   
   private showSuggestions(): void {
@@ -167,55 +202,65 @@ class TransliterationHandler {
     // Create suggestion box
     this.suggestionBox = document.createElement('div');
     this.suggestionBox.className = 'transliteration-suggestions';
+    // Basic styles (moved positioning/layout here)
     this.suggestionBox.style.position = 'absolute';
     this.suggestionBox.style.zIndex = '10000';
-    this.suggestionBox.style.backgroundColor = '#fff';
-    this.suggestionBox.style.border = '1px solid #ccc';
+    this.suggestionBox.style.padding = '5px 0';
     this.suggestionBox.style.borderRadius = '4px';
     this.suggestionBox.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
-    this.suggestionBox.style.padding = '5px 0';
     
     // Position the box near the current field
     const rect = this.currentField.getBoundingClientRect();
-    this.suggestionBox.style.left = rect.left + 'px';
-    this.suggestionBox.style.top = (rect.bottom + window.scrollY) + 'px';
-    
+    this.suggestionBox.style.left = `${rect.left + window.scrollX}px`; // Use scrollX for correct positioning
+    this.suggestionBox.style.top = `${rect.bottom + window.scrollY}px`; // Use scrollY
+    this.suggestionBox.style.minWidth = `${rect.width}px`; // Match width of input field
+
     // Add suggestions
-    this.suggestions.forEach((suggestion, index) => {
+    this.suggestions.forEach((suggestion) => {
       const item = document.createElement('div');
       item.className = 'suggestion-item';
       item.textContent = suggestion;
+      // Basic item styles
       item.style.padding = '5px 10px';
       item.style.cursor = 'pointer';
-      
-      item.addEventListener('mouseenter', () => {
-        item.style.backgroundColor = '#f0f0f0';
-      });
-      
-      item.addEventListener('mouseleave', () => {
-        item.style.backgroundColor = '';
-      });
-      
+      item.style.whiteSpace = 'nowrap'; // Prevent wrapping
+
       item.addEventListener('click', () => {
         // compute before-word context
-        this.updateInputBuffer();
+        this.updateInputBuffer(); 
         const before = this.inputBuffer.substring(0, this.lastWordBoundary);
         this.replaceWithSuggestion(before, suggestion);
         this.removeSuggestionBox();
       });
       
+      // Add hover listeners directly (simpler than CSS hover for dynamic elements)
+      item.addEventListener('mouseenter', () => {
+        // Use computed style for hover background based on theme
+        const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        item.style.backgroundColor = isDark ? '#3e3e3e' : '#f0f0f0';
+      });
+      item.addEventListener('mouseleave', () => {
+        item.style.backgroundColor = ''; // Revert on mouse leave
+      });
+
       if (this.suggestionBox) {
         this.suggestionBox.appendChild(item);
       }
     });
     
-    // inject dark/light styles once
+    // inject dark/light styles once - Apply to items too
     if (!document.getElementById('translit-style')) {
       const style = document.createElement('style');
       style.id = 'translit-style';
+      // Apply base styles and theme-specific overrides
       style.textContent = `
         .transliteration-suggestions {
-          font-family: inherit;
+          font-family: inherit; /* Inherit font from page */
+          font-size: inherit;
+          border: 1px solid; /* Border color set by theme */
+        }
+        .suggestion-item {
+           /* Base item styles if needed */
         }
         @media (prefers-color-scheme: dark) {
           .transliteration-suggestions {
@@ -223,9 +268,8 @@ class TransliterationHandler {
             color: #eee;
             border-color: #555;
           }
-          .transliteration-suggestions .suggestion-item:hover {
-            background: #3e3e3e;
-          }
+          /* Hover handled by JS, but keep this for potential future use */
+          /* .suggestion-item:hover { background: #3e3e3e; } */
         }
         @media (prefers-color-scheme: light) {
           .transliteration-suggestions {
@@ -233,15 +277,31 @@ class TransliterationHandler {
             color: #000;
             border-color: #ccc;
           }
-          .transliteration-suggestions .suggestion-item:hover {
-            background: #f0f0f0;
-          }
+          /* Hover handled by JS */
+          /* .suggestion-item:hover { background: #f0f0f0; } */
         }
       `;
       document.head.appendChild(style);
     }
 
     document.body.appendChild(this.suggestionBox);
+    // Apply initial theme styles after appending
+    this.applyThemeStyles(); 
+  }
+
+  // Helper function to apply theme styles dynamically
+  private applyThemeStyles(): void {
+    if (!this.suggestionBox) return;
+    const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (isDark) {
+        this.suggestionBox.style.backgroundColor = '#2e2e2e';
+        this.suggestionBox.style.color = '#eee';
+        this.suggestionBox.style.borderColor = '#555';
+    } else {
+        this.suggestionBox.style.backgroundColor = '#fff';
+        this.suggestionBox.style.color = '#000';
+        this.suggestionBox.style.borderColor = '#ccc';
+    }
   }
   
   private handleDocumentClick(event: MouseEvent): void {
