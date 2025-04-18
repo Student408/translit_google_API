@@ -32,8 +32,6 @@ class TransliterationHandler {
   private lastWordBoundary = 0;
   private suggestions: string[] = [];
   private suggestionBox: HTMLDivElement | null = null;
-  private highlightedSuggestionIndex: number | null = null;
-  private _themeListener?: () => void;
   
   constructor() {
     this.initEventListeners();
@@ -96,31 +94,23 @@ class TransliterationHandler {
       const before = this.inputBuffer.substring(0, this.lastWordBoundary);
       const word = this.inputBuffer.substring(this.lastWordBoundary).trim();
       if (word) {
+        // Only preventDefault if we are going to process a word
         event.preventDefault();
         this.processCurrentWord();
         return;
       }
       // If no word, let the spacebar work as normal
     }
-    // --- Suggestion box keyboard navigation ---
+    // Handle special keys like Enter/Tab to select suggestion
     if (this.suggestionBox && this.suggestions.length > 0) {
-      // Track highlighted index
-      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        event.preventDefault();
-        this.navigateSuggestions(event.key === 'ArrowDown' ? 1 : -1);
-        return;
-      }
       if (event.key === 'Enter' || event.key === 'Tab') {
         event.preventDefault();
         const before = this.inputBuffer.substring(0, this.lastWordBoundary);
-        const idx = this.highlightedSuggestionIndex ?? 0;
-        this.replaceWithSuggestion(before, this.suggestions[idx]);
+        this.replaceWithSuggestion(before, this.suggestions[0]);
         this.removeSuggestionBox();
-        return;
       } else if (event.key === 'Escape') {
         event.preventDefault();
         this.removeSuggestionBox();
-        return;
       }
     }
   }
@@ -169,15 +159,21 @@ class TransliterationHandler {
       if (!sel || !sel.rangeCount) return;
 
       const range = sel.getRangeAt(0);
-      let textNode = this.currentField.firstChild;
+      const textNode = this.currentField.firstChild;
 
       // More robust handling for contentEditable
-      if (!textNode) {
-        textNode = document.createTextNode('');
-        this.currentField.appendChild(textNode);
+      if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+          // If the field only contains text, replace it
+          textNode.textContent = nodeText;
+          range.setStart(textNode, nodeText.length);
+      } else {
+          // If the field might contain other elements, clear and insert
+          this.currentField.textContent = nodeText;
+          const newTextNode = this.currentField.firstChild;
+          if (newTextNode) {
+              range.setStart(newTextNode, nodeText.length);
+          }
       }
-      textNode.textContent = nodeText;
-      range.setStart(textNode, nodeText.length);
       
       range.collapse(true);
       sel.removeAllRanges();
@@ -199,17 +195,14 @@ class TransliterationHandler {
     this.suggestionBox.style.padding = '5px 0';
     this.suggestionBox.style.borderRadius = '4px';
     this.suggestionBox.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
-    this.suggestionBox.setAttribute('role', 'listbox');
-    this.highlightedSuggestionIndex = null;
     const rect = this.currentField.getBoundingClientRect();
     this.suggestionBox.style.left = `${rect.left + window.scrollX}px`;
     this.suggestionBox.style.top = `${rect.bottom + window.scrollY}px`;
     this.suggestionBox.style.minWidth = `${rect.width}px`;
 
-    this.suggestions.forEach((suggestion, idx) => {
+    this.suggestions.forEach((suggestion) => {
       const item = document.createElement('div');
       item.className = 'suggestion-item';
-      item.setAttribute('role', 'option');
       item.textContent = suggestion;
       item.style.padding = '5px 10px';
       item.style.cursor = 'pointer';
@@ -221,13 +214,11 @@ class TransliterationHandler {
         this.removeSuggestionBox();
       });
       item.addEventListener('mouseenter', () => {
-        this.highlightedSuggestionIndex = idx;
         const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
         item.style.backgroundColor = isDark ? '#3e3e3e' : '#f0f0f0';
         item.style.color = isDark ? '#eee' : '#000';
       });
       item.addEventListener('mouseleave', () => {
-        this.highlightedSuggestionIndex = null;
         item.style.backgroundColor = '';
         item.style.color = '';
       });
@@ -277,12 +268,6 @@ class TransliterationHandler {
 
     document.body.appendChild(this.suggestionBox);
     this.applyThemeStyles();
-    // Theme change reactivity
-    if (!this._themeListener) {
-      this._themeListener = () => this.applyThemeStyles();
-      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', this._themeListener);
-      window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', this._themeListener);
-    }
   }
 
   private applyThemeStyles(): void {
@@ -312,10 +297,6 @@ class TransliterationHandler {
       this.suggestionBox.parentNode.removeChild(this.suggestionBox);
       this.suggestionBox = null;
     }
-    // Remove style if present and no suggestion box
-    if (!document.querySelector('.transliteration-suggestions') && document.getElementById('translit-style')) {
-      document.getElementById('translit-style')!.remove();
-    }
   }
   
   private updateInputBuffer(): void {
@@ -334,21 +315,6 @@ class TransliterationHandler {
     // Find the last word boundary (space or beginning of input)
     const lastSpaceIndex = this.inputBuffer.lastIndexOf(' ');
     this.lastWordBoundary = lastSpaceIndex !== -1 ? lastSpaceIndex + 1 : 0;
-  }
-  
-  private navigateSuggestions(direction: 1 | -1): void {
-    if (!this.suggestionBox) return;
-    if (this.highlightedSuggestionIndex == null) this.highlightedSuggestionIndex = 0;
-    else this.highlightedSuggestionIndex += direction;
-    if (this.highlightedSuggestionIndex < 0) this.highlightedSuggestionIndex = this.suggestions.length - 1;
-    if (this.highlightedSuggestionIndex >= this.suggestions.length) this.highlightedSuggestionIndex = 0;
-    // Update highlight
-    Array.from(this.suggestionBox.children).forEach((el, idx) => {
-      (el as HTMLElement).style.backgroundColor =
-        idx === this.highlightedSuggestionIndex
-          ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? '#444' : '#e0e0e0')
-          : '';
-    });
   }
 }
 
