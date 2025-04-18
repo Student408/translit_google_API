@@ -17,6 +17,28 @@ try {
   process.exit(1);
 }
 
+// AFTER compiling via tsc, move JS files from subfolders to dist root
+const jsMap = [
+  { src: 'background/background.js', dest: 'background.js' },
+  { src: 'content/content.js',     dest: 'content.js' },
+  { src: 'popup/popup.js',         dest: 'popup.js' }
+];
+jsMap.forEach(({ src, dest }) => {
+  const from = path.join('dist', src);
+  const to   = path.join('dist', dest);
+  if (fs.existsSync(from)) {
+    fs.renameSync(from, to);
+  }
+});
+
+// Remove now-empty subdirectories
+['background', 'content', 'popup'].forEach(dir => {
+  const dirPath = path.join('dist', dir);
+  if (fs.existsSync(dirPath)) {
+    fs.rmSync(dirPath, { recursive: true, force: true });
+  }
+});
+
 // Copy static files
 const filesToCopy = [
   { from: 'manifest.json', to: 'dist/manifest.json' },
