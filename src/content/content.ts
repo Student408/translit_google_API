@@ -61,9 +61,6 @@ class TransliterationHandler {
     // Listen for focus events on editable elements
     document.addEventListener('focusin', this.handleFocusIn.bind(this));
     
-    // Listen for input events
-    document.addEventListener('input', this.handleInput.bind(this), true);
-    
     // Listen for key events
     document.addEventListener('keydown', this.handleKeyDown.bind(this), true);
     
@@ -90,63 +87,66 @@ class TransliterationHandler {
     );
   }
   
-  private handleInput(event: Event): void {
-    if (!this.settings.enabled || !this.currentField) return;
-    
-    const target = event.target as HTMLElement;
-    if (target !== this.currentField) return;
-    
-    this.updateInputBuffer();
-    this.processCurrentWord();
-  }
-  
-  private updateInputBuffer(): void {
-    if (!this.currentField) return;
-    
-    let text = '';
-    if (this.currentField.tagName.toLowerCase() === 'input' || 
-        this.currentField.tagName.toLowerCase() === 'textarea') {
-      text = (this.currentField as HTMLInputElement).value;
-    } else {
-      text = this.currentField.textContent || '';
+  private handleKeyDown(event: KeyboardEvent): void {
+    if (event.key === ' ' && this.settings.enabled && this.currentField) {
+      this.updateInputBuffer();
+      this.processCurrentWord();
+      event.preventDefault(); // prevent default space, we'll re‑insert after translation
     }
+    // Handle special keys like Enter/Tab to select suggestion
+    if (!this.suggestionBox || !this.suggestions.length) return;
     
-    this.inputBuffer = text;
-    
-    // Find the last word boundary (space or beginning of input)
-    const lastSpaceIndex = this.inputBuffer.lastIndexOf(' ');
-    this.lastWordBoundary = lastSpaceIndex !== -1 ? lastSpaceIndex + 1 : 0;
+    if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault();
+      // compute before-word context
+      const before = this.inputBuffer.substring(0, this.lastWordBoundary);
+      this.replaceWithSuggestion(before, this.suggestions[0]);
+      this.removeSuggestionBox();
+    } else if (event.key === 'Escape') {
+      this.removeSuggestionBox();
+    }
   }
   
   private async processCurrentWord(): Promise<void> {
-    if (this.inputBuffer.length <= this.lastWordBoundary) return;
-    
-    const currentWord = this.inputBuffer.substring(this.lastWordBoundary);
-    if (!currentWord.trim()) return;
-    
-    // Only transliterate if we have a valid word
-    if (/\w+/.test(currentWord)) {
-      try {
-        // Request transliteration from background script
-        chrome.runtime.sendMessage({
-          action: 'transliterate',
-          text: currentWord,
-          language: this.settings.language
-        }, (response: TransliterationResponse) => {
-          if (response && response.success) {
-            this.suggestions = response.suggestions;
-            if (this.suggestions.length > 0) {
-              if (this.settings.autoReplace) {
-                this.replaceWithSuggestion(this.suggestions[0]);
-              } else {
-                this.showSuggestions();
-              }
-            }
-          }
-        });
-      } catch (error) {
-        console.error('Error sending message to background script:', error);
+    // lastWordBoundary already set by updateInputBuffer()
+    const before = this.inputBuffer.substring(0, this.lastWordBoundary);
+    const word = this.inputBuffer.substring(this.lastWordBoundary).trim();
+    if (!word) return;
+
+    // request transliteration
+    chrome.runtime.sendMessage({
+      action: 'transliterate',
+      text: word,
+      language: this.settings.language
+    }, (response: TransliterationResponse) => {
+      if (response?.success && response.suggestions.length) {
+        const suggestion = response.suggestions[0];
+        this.replaceWithSuggestion(before, suggestion);
+      } else {
+        // no suggestions: just insert a space
+        this.replaceWithSuggestion(before, word, true);
       }
+    });
+  }
+  
+  private replaceWithSuggestion(beforeWord: string, suggestion: string, noTrans?: boolean): void {
+    if (!this.currentField) return;
+    const suffix = noTrans ? ' ' : ' '; // always add a space
+    if (this.currentField.tagName === 'INPUT' || this.currentField.tagName === 'TEXTAREA') {
+      const input = this.currentField as HTMLInputElement;
+      input.value = beforeWord + suggestion + suffix;
+      const pos = (beforeWord + suggestion + suffix).length;
+      input.setSelectionRange(pos, pos);
+    } else {
+      const sel = window.getSelection();
+      if (!sel) return;
+      const nodeText = beforeWord + suggestion + suffix;
+      this.currentField.textContent = nodeText;
+      const range = document.createRange();
+      range.setStart(this.currentField.firstChild!, nodeText.length);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
     }
   }
   
@@ -189,7 +189,10 @@ class TransliterationHandler {
       });
       
       item.addEventListener('click', () => {
-        this.replaceWithSuggestion(suggestion);
+        // compute before-word context
+        this.updateInputBuffer();
+        const before = this.inputBuffer.substring(0, this.lastWordBoundary);
+        this.replaceWithSuggestion(before, suggestion);
         this.removeSuggestionBox();
       });
       
@@ -198,73 +201,39 @@ class TransliterationHandler {
       }
     });
     
-    document.body.appendChild(this.suggestionBox);
-  }
-  
-  private replaceWithSuggestion(suggestion: string): void {
-    if (!this.currentField) return;
-    
-    if (this.currentField.tagName.toLowerCase() === 'input' || 
-        this.currentField.tagName.toLowerCase() === 'textarea') {
-      const input = this.currentField as HTMLInputElement;
-      const beforeWord = this.inputBuffer.substring(0, this.lastWordBoundary);
-      const afterWord = this.inputBuffer.substring(input.value.length);
-      input.value = beforeWord + suggestion + afterWord;
-      
-      // Set cursor position after the inserted suggestion
-      input.selectionStart = input.selectionEnd = beforeWord.length + suggestion.length;
-    } else {
-      // For contentEditable elements
-      const range = document.createRange();
-      const sel = window.getSelection();
-      
-      // Get current selection/cursor position
-      if (sel && sel.rangeCount > 0) {
-        const currentRange = sel.getRangeAt(0);
-        const beforeWord = this.inputBuffer.substring(0, this.lastWordBoundary);
-        const afterWord = this.inputBuffer.substring(currentRange.startOffset);
-        
-        // Fix the null check issue
-        if (this.currentField.firstChild) {
-          this.currentField.textContent = beforeWord + suggestion + afterWord;
-          
-          // Reset cursor position
-          range.setStart(this.currentField.firstChild, beforeWord.length + suggestion.length);
-          range.collapse(true);
-          sel.removeAllRanges();
-          sel.addRange(range);
-        } else {
-          // Handle case where firstChild is null
-          this.currentField.textContent = beforeWord + suggestion + afterWord;
-          
-          // Create a text node if needed
-          if (!this.currentField.firstChild) {
-            this.currentField.appendChild(document.createTextNode(beforeWord + suggestion + afterWord));
+    // inject dark/light styles once
+    if (!document.getElementById('translit-style')) {
+      const style = document.createElement('style');
+      style.id = 'translit-style';
+      style.textContent = `
+        .transliteration-suggestions {
+          font-family: inherit;
+        }
+        @media (prefers-color-scheme: dark) {
+          .transliteration-suggestions {
+            background: #2e2e2e;
+            color: #eee;
+            border-color: #555;
           }
-          
-          // Then set selection
-          if (this.currentField.firstChild) {
-            range.setStart(this.currentField.firstChild, beforeWord.length + suggestion.length);
-            range.collapse(true);
-            sel.removeAllRanges();
-            sel.addRange(range);
+          .transliteration-suggestions .suggestion-item:hover {
+            background: #3e3e3e;
           }
         }
-      }
+        @media (prefers-color-scheme: light) {
+          .transliteration-suggestions {
+            background: #fff;
+            color: #000;
+            border-color: #ccc;
+          }
+          .transliteration-suggestions .suggestion-item:hover {
+            background: #f0f0f0;
+          }
+        }
+      `;
+      document.head.appendChild(style);
     }
-  }
-  
-  private handleKeyDown(event: KeyboardEvent): void {
-    // Handle special keys like Enter/Tab to select suggestion
-    if (!this.suggestionBox || !this.suggestions.length) return;
-    
-    if (event.key === 'Enter' || event.key === 'Tab') {
-      event.preventDefault();
-      this.replaceWithSuggestion(this.suggestions[0]);
-      this.removeSuggestionBox();
-    } else if (event.key === 'Escape') {
-      this.removeSuggestionBox();
-    }
+
+    document.body.appendChild(this.suggestionBox);
   }
   
   private handleDocumentClick(event: MouseEvent): void {
@@ -280,6 +249,24 @@ class TransliterationHandler {
       this.suggestionBox.parentNode.removeChild(this.suggestionBox);
       this.suggestionBox = null;
     }
+  }
+  
+  private updateInputBuffer(): void {
+    if (!this.currentField) return;
+    
+    let text = '';
+    if (this.currentField.tagName.toLowerCase() === 'input' || 
+        this.currentField.tagName.toLowerCase() === 'textarea') {
+      text = (this.currentField as HTMLInputElement).value;
+    } else {
+      text = this.currentField.textContent || '';
+    }
+    
+    this.inputBuffer = text;
+    
+    // Find the last word boundary (space or beginning of input)
+    const lastSpaceIndex = this.inputBuffer.lastIndexOf(' ');
+    this.lastWordBoundary = lastSpaceIndex !== -1 ? lastSpaceIndex + 1 : 0;
   }
 }
 
