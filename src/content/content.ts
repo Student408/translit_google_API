@@ -95,21 +95,6 @@ class TransliterationHandler {
       this.updateInputBuffer();
       const before = this.inputBuffer.substring(0, this.lastWordBoundary);
       const word = this.inputBuffer.substring(this.lastWordBoundary).trim();
-
-      // Double-space: select first suggestion if dropdown is open
-      if (
-        !this.settings.autoReplace &&
-        this.suggestionBox &&
-        this.suggestions.length > 0 &&
-        word === '' // means previous key was space, so now at word boundary
-      ) {
-        event.preventDefault();
-        const idx = this.highlightedSuggestionIndex ?? 0;
-        this.replaceWithSuggestion(before, this.suggestions[idx]);
-        this.removeSuggestionBox();
-        return;
-      }
-
       if (word) {
         event.preventDefault();
         this.processCurrentWord();
