@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Multi-Language Transliterator",
+  "version": "1.0",
+  "description": "Transliterates English text to various languages in any editable field",
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": ["https://inputtools.google.com/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "assets/icon16.png",
+      "48": "assets/icon48.png",
+      "128": "assets/icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
