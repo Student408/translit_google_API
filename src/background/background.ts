@@ -141,7 +141,7 @@ const SCRIPT_TO_LANGUAGE = {
   '\u0D00-\u0D7F': ['ml'],
   // Sinhala
   '\u0D80-\u0DFF': ['si'],
-  // Thai
+  // Thai (removed duplicate)
   '\u0E00-\u0E7F': ['th'],
   // Lao
   '\u0E80-\u0EFF': ['lo'],
@@ -162,9 +162,8 @@ const SCRIPT_TO_LANGUAGE = {
   // Arabic
   '\u0600-\u06FF': ['ar', 'fa', 'ur'],
   // Hebrew
-  '\u0590-\u05FF': ['he'],
-  // Thai
-  '\u0E00-\u0E7F': ['th']
+  '\u0590-\u05FF': ['he']
+  // Removed duplicate Thai entry
 };
 
 // Function to detect script of text
@@ -278,7 +277,7 @@ async function reverseTransliterate(text: string, sourceLanguage: string, tabId:
       chrome.tabs.sendMessage(tabId, {
         action: 'replaceSelection',
         suggestion: transliteration
-      }).catch(error => {
+      }).catch((error: Error) => {
         console.warn("Could not send message to content script:", error);
       });
     } else {
@@ -354,8 +353,8 @@ chrome.runtime.onMessage.addListener((
   }
 });
 
-// Listen for context menu clicks
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+// Listen for context menu clicks with proper type annotations
+chrome.contextMenus.onClicked.addListener((info: chrome.contextMenus.OnClickData, tab?: chrome.tabs.Tab) => {
   if (!info.selectionText || !tab?.id) return;
   
   const menuId = info.menuItemId as string;
@@ -373,10 +372,15 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
       });
 
       if (result.success && result.suggestions.length > 0) {
+        interface ReplaceSelectionMessage {
+          action: 'replaceSelection';
+          suggestion: string;
+        }
+
         chrome.tabs.sendMessage(tabId, {
           action: 'replaceSelection',
           suggestion: result.suggestions[0]
-        }).catch(error => console.warn("Could not send message to content script:", error));
+        } as ReplaceSelectionMessage).catch((error: Error) => console.warn("Could not send message to content script:", error));
       }
     })();
   } 
@@ -392,7 +396,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
       // If detection fails, notify user to select language manually
       chrome.tabs.sendMessage(tabId, {
         action: 'showLanguageSelectionNotification'
-      }).catch(error => console.warn("Could not send notification message:", error));
+      }).catch((error: Error) => console.warn("Could not send notification message:", error));
     }
   }
   // Handle manually selected language for reverse transliteration

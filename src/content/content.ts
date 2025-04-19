@@ -72,7 +72,11 @@ class TransliterationHandler {
   }
   
   private initMessageListener(): void {
-    chrome.runtime.onMessage.addListener((message: ChromeMessage, sender, sendResponse) => {
+    chrome.runtime.onMessage.addListener((
+      message: ChromeMessage, 
+      _sender: chrome.runtime.MessageSender, 
+      _sendResponse: (response?: any) => void
+    ) => {
       if (message.action === 'settingsChanged') {
         if (message.settings) {
           this.settings = message.settings;
@@ -88,6 +92,48 @@ class TransliterationHandler {
       }
       return false;
     });
+  }
+
+  private replaceSelectedText(text: string): void {
+    if (!document.activeElement) return;
+    
+    const activeElement = document.activeElement as HTMLElement;
+    
+    // Check if we're in an editable field
+    if (this.isEditableElement(activeElement)) {
+      const selection = window.getSelection();
+      
+      if (selection && selection.rangeCount > 0) {
+        // Get the selected range
+        const range = selection.getRangeAt(0);
+        
+        // Delete selected text
+        range.deleteContents();
+        
+        // Insert the new text
+        const textNode = document.createTextNode(text);
+        range.insertNode(textNode);
+        
+        // Move the caret to the end of the inserted text
+        range.setStartAfter(textNode);
+        range.setEndAfter(textNode);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      } else if (activeElement instanceof HTMLInputElement || 
+                 activeElement instanceof HTMLTextAreaElement) {
+        // For standard input elements
+        const start = activeElement.selectionStart || 0;
+        const end = activeElement.selectionEnd || 0;
+        const beforeText = activeElement.value.substring(0, start);
+        const afterText = activeElement.value.substring(end);
+        
+        activeElement.value = beforeText + text + afterText;
+        
+        // Set cursor position after the inserted text
+        const newPosition = beforeText.length + text.length;
+        activeElement.setSelectionRange(newPosition, newPosition);
+      }
+    }
   }
 
   private handleFocusIn(event: FocusEvent): void {
