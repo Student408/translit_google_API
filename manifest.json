@@ -3,8 +3,8 @@
   "name": "Multi-Language Transliterator",
   "version": "1.0",
   "description": "Transliterates English text to various languages in any editable field",
-  "permissions": ["storage", "activeTab", "contextMenus"],
-  "host_permissions": ["https://inputtools.google.com/*", "https://translate.googleapis.com/*"],
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": ["https://inputtools.google.com/*"],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {

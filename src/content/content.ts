@@ -18,7 +18,6 @@ interface ChromeMessage {
   success?: boolean;
   suggestions?: string[];
   error?: string;
-  suggestion?: string;
 }
 
 class TransliterationHandler {
@@ -33,12 +32,10 @@ class TransliterationHandler {
   private lastWordBoundary = 0;
   private suggestions: string[] = [];
   private suggestionBox: HTMLDivElement | null = null;
-  private notificationElement: HTMLDivElement | null = null;
   
   constructor() {
     this.initEventListeners();
     this.loadSettings();
-    this.initMessageListener(); // Make sure this is called
   }
   
   private async loadSettings(): Promise<void> {
@@ -71,71 +68,6 @@ class TransliterationHandler {
     document.addEventListener('click', this.handleDocumentClick.bind(this));
   }
   
-  private initMessageListener(): void {
-    chrome.runtime.onMessage.addListener((
-      message: ChromeMessage, 
-      _sender: chrome.runtime.MessageSender, 
-      _sendResponse: (response?: any) => void
-    ) => {
-      if (message.action === 'settingsChanged') {
-        if (message.settings) {
-          this.settings = message.settings;
-          console.log('Content script received settings update:', this.settings);
-        }
-      } else if (message.action === 'replaceSelection' && message.suggestion) {
-        this.replaceSelectedText(message.suggestion);
-      } else if (message.action === 'showLanguageSelectionNotification') {
-        this.showNotification(
-          'Language detection failed',
-          'Right-click again and select the source language manually from the menu.'
-        );
-      }
-      return false;
-    });
-  }
-
-  private replaceSelectedText(text: string): void {
-    if (!document.activeElement) return;
-    
-    const activeElement = document.activeElement as HTMLElement;
-    
-    // Check if we're in an editable field
-    if (this.isEditableElement(activeElement)) {
-      const selection = window.getSelection();
-      
-      if (selection && selection.rangeCount > 0) {
-        // Get the selected range
-        const range = selection.getRangeAt(0);
-        
-        // Delete selected text
-        range.deleteContents();
-        
-        // Insert the new text
-        const textNode = document.createTextNode(text);
-        range.insertNode(textNode);
-        
-        // Move the caret to the end of the inserted text
-        range.setStartAfter(textNode);
-        range.setEndAfter(textNode);
-        selection.removeAllRanges();
-        selection.addRange(range);
-      } else if (activeElement instanceof HTMLInputElement || 
-                 activeElement instanceof HTMLTextAreaElement) {
-        // For standard input elements
-        const start = activeElement.selectionStart || 0;
-        const end = activeElement.selectionEnd || 0;
-        const beforeText = activeElement.value.substring(0, start);
-        const afterText = activeElement.value.substring(end);
-        
-        activeElement.value = beforeText + text + afterText;
-        
-        // Set cursor position after the inserted text
-        const newPosition = beforeText.length + text.length;
-        activeElement.setSelectionRange(newPosition, newPosition);
-      }
-    }
-  }
-
   private handleFocusIn(event: FocusEvent): void {
     const target = event.target as HTMLElement;
     if (this.isEditableElement(target)) {
@@ -383,78 +315,6 @@ class TransliterationHandler {
     // Find the last word boundary (space or beginning of input)
     const lastSpaceIndex = this.inputBuffer.lastIndexOf(' ');
     this.lastWordBoundary = lastSpaceIndex !== -1 ? lastSpaceIndex + 1 : 0;
-  }
-
-  private showNotification(title: string, message: string, duration: number = 5000): void {
-    // Remove existing notification if any
-    this.removeNotification();
-    
-    // Create notification element
-    this.notificationElement = document.createElement('div');
-    this.notificationElement.className = 'transliteration-notification';
-    this.notificationElement.style.cssText = `
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      background-color: #333;
-      color: #fff;
-      padding: 15px;
-      border-radius: 5px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-      z-index: 10000;
-      max-width: 300px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-    `;
-    
-    // Create title
-    const titleElement = document.createElement('div');
-    titleElement.textContent = title;
-    titleElement.style.fontWeight = 'bold';
-    titleElement.style.marginBottom = '5px';
-    this.notificationElement.appendChild(titleElement);
-    
-    // Create message
-    const messageElement = document.createElement('div');
-    messageElement.textContent = message;
-    messageElement.style.fontSize = '14px';
-    this.notificationElement.appendChild(messageElement);
-    
-    // Create close button
-    const closeBtn = document.createElement('div');
-    closeBtn.textContent = '×';
-    closeBtn.style.cssText = `
-      position: absolute;
-      top: 5px;
-      right: 8px;
-      cursor: pointer;
-      font-size: 16px;
-    `;
-    closeBtn.addEventListener('click', () => this.removeNotification());
-    this.notificationElement.appendChild(closeBtn);
-    
-    // Add to document
-    document.body.appendChild(this.notificationElement);
-    
-    // Auto remove after duration
-    setTimeout(() => this.removeNotification(), duration);
-
-    // Apply dark/light mode styles
-    const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if (isDark) {
-      this.notificationElement.style.backgroundColor = '#333';
-      this.notificationElement.style.color = '#fff';
-    } else {
-      this.notificationElement.style.backgroundColor = '#fff';
-      this.notificationElement.style.color = '#333';
-      this.notificationElement.style.border = '1px solid #ddd';
-    }
-  }
-  
-  private removeNotification(): void {
-    if (this.notificationElement && this.notificationElement.parentNode) {
-      this.notificationElement.parentNode.removeChild(this.notificationElement);
-      this.notificationElement = null;
-    }
   }
 }
 
